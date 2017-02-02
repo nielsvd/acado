@@ -112,6 +112,13 @@ public:
 
 protected:
 
+  /** Setting up initialization routine:
+	 *   - initialize memory
+	 *
+	 *   \return SUCCESSFUL_RETURN
+	 */
+	virtual returnValue setupInitialization( void );
+
 	/** Setting up of an objective evaluation:
 	 *   - functions and derivatives evaulation
 	 *   - creating Hessians and gradients
@@ -205,6 +212,14 @@ private:
 	ExportVariable qpLambda, qpMu, qpSlacks;
 
 	ExportVariable nIt;
+
+  ExportVariable hpmpc_nx, hpmpc_nu_N, hpmpc_nb, hpmpc_idxb, hpmpc_ng, hpmpc_N2;
+  ExportVariable hpmpc_A, hpmpc_B, hpmpc_b;
+  ExportVariable hpmpc_Q, hpmpc_S, hpmpc_R, hpmpc_q, hpmpc_r;
+  ExportVariable hpmpc_lb, hpmpc_ub, hpmpc_C, hpmpc_D, hpmpc_lg, hpmpc_ug;
+  ExportVariable hpmpc_x, hpmpc_u, hpmpc_mu, hpmpc_lambda;
+
+  ExportVariable hpmpc_work, hpmpc_work_lb, hpmpc_work_ub, hpmpc_work_idxb, hpmpc_work_mu;
 
 //	ExportVariable qpWork;
 

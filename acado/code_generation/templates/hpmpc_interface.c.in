@@ -10,8 +10,12 @@
 /* Stdlib for malloc */
 #include <stdlib.h>
 
+#include <stdio.h>
+
 /* HPMPC header */
 #include <c_interface.h>
+
+#define MAX(a,b) (a > b ? a : b)
 
 // problem size (states, inputs, horizon)
 #define NX @MODULE_PREFIX@_NX
@@ -40,15 +44,143 @@
 // Debug flag TODO
 #define PC_DEBUG @PRINT_LEVEL@
 
-static double* @MODULE_NAME@_work;
-static int @MODULE_NAME@_hpmpc_init = 0;
-
-void @MODULE_NAME@_hpmpc_init_fun(int *nx, int *nu, int *nb, int **hidxb, int *ng, int N2)
+void @MODULE_NAME@_hpmpc_initialize(real_t* A, real_t* B, real_t* b,
+                            real_t* Q, real_t* Qf, real_t* S, real_t* R,
+                            real_t* q, real_t* qf, real_t* r,
+                            real_t* C, real_t* D, real_t* lbg, real_t* ubg, real_t* CN,
+                            real_t* x, real_t* u,
+                            real_t* lambda, real_t* mu)
 {
-  int hpmpc_workspace_size = hpmpc_d_ip_ocp_hard_tv_work_space_size_bytes(N, nx, nu, nb, hidxb, ng, N2);
-  @MODULE_NAME@_work = (real_t*)malloc(hpmpc_workspace_size);
+  int i, j, ii, offset;
 
-  @MODULE_NAME@_hpmpc_init = 1;
+  // array with number of path-constraints for every stage
+  @QP_ND_ARRAY@
+
+  // accumulated number of path-constraints for every stage
+  unsigned int nDac [N+2];
+  nDac[0] = 0;
+  for(int i=0; i<N+1; ++i) nDac[i+1] = nDac[i] + nD[i];
+
+  // define qp solver arguments
+  @HP_WS@N2[0] = N;
+  //nx
+  @HP_WS@nx[0] = 0;
+  for (i=1; i<N+1; ++i) @HP_WS@nx[i] = NX;
+  //nu
+  for (i=0; i<N; ++i) @HP_WS@nu_N[i] = NU;
+  @HP_WS@nu_N[N] = 0;
+  //nb & idxb & lb & ub
+  ///first stage (bounds on controls only)
+  @HP_WS@nb[0] = NU;
+  @HP_WS@idxb[0] = @HP_WS@work_idxb;
+  @HP_WS@lb[0] = @HP_WS@work_lb;
+  @HP_WS@ub[0] = @HP_WS@work_ub;
+  ///middle stages
+  for(j=1; j<N; ++j) {
+    @HP_WS@nb[j] = NX+NU;
+    @HP_WS@idxb[j] = @HP_WS@work_idxb + j*(NX+NU);
+    @HP_WS@lb[j] = @HP_WS@work_lb + j*(NX+NU);
+    @HP_WS@ub[j] = @HP_WS@work_ub + j*(NX+NU);
+  }
+  ///last stage (copy constraints from second to last)
+  @HP_WS@nb[N] = NX;
+  @HP_WS@idxb[N] = @HP_WS@work_idxb + N*(NX+NU);
+  @HP_WS@lb[N] = @HP_WS@work_lb + N*(NX+NU);
+  @HP_WS@ub[N] = @HP_WS@work_ub + N*(NX+NU);
+  //ng & C & D & lg & ug
+  ///first and middle stages
+  for (j=0; j<N; ++j) {
+    @HP_WS@ng[j] = nD[j];
+    @HP_WS@C[j] = C + NX*nDac[j];
+    @HP_WS@D[j] = D + NU*nDac[j];
+    @HP_WS@lg[j] = lbg + nDac[j];
+    @HP_WS@ug[j] = ubg + nDac[j];
+  }
+  ///last stage
+  @HP_WS@ng[N] = nD[N];
+  @HP_WS@C[N] = CN;
+  @HP_WS@lg[N] = lbg + nDac[N];
+  @HP_WS@ug[N] = ubg + nDac[N];
+  //A & B & b
+  for (i=0; i<N; ++i) {
+    @HP_WS@A[i] = &A[i*NX*NX];
+    @HP_WS@B[i] = &B[i*NX*NU];
+    @HP_WS@b[i] = &b[i*NX];
+  }
+  //Q & S & R & q & r
+  ///first and middle stages
+  for (i=0; i<N; ++i) {
+    @HP_WS@Q[i] = &Q[i*NX*NX];
+    @HP_WS@S[i] = &S[i*NU*NX];
+    @HP_WS@R[i] = &R[i*NU*NU];
+    @HP_WS@q[i] = &q[i*NX];
+    @HP_WS@r[i] = &r[i*NU];
+  }
+  ///last stage
+  @HP_WS@Q[N] = &Qf[0];
+  @HP_WS@q[N] = &qf[0];
+  //x & u & mu & lambda
+  for (i=0; i<N; ++i) {
+    @HP_WS@x[i] = &x[i*NX];
+    @HP_WS@u[i] = &u[i*NU];
+    @HP_WS@mu[i] = &@HP_WS@work_mu[i*2*(NX+NU)+2*nDac[i]];
+    @HP_WS@lambda[i] = &lambda[i*NX];
+  }
+  @HP_WS@x[N] = &x[N*NX];
+  @HP_WS@mu[N] = &@HP_WS@work_mu[N*2*(NX+NU)+2*nDac[N]];
+
+  int hpmpc_workspace_size = hpmpc_d_ip_ocp_hard_tv_work_space_size_bytes(N, @HP_WS@nx, @HP_WS@nu_N, @HP_WS@nb, @HP_WS@idxb, @HP_WS@ng, @HP_WS@N2[0]);
+  @HP_WS@work[0] = (real_t*)malloc(8*hpmpc_workspace_size);
+}
+
+void @MODULE_NAME@_in_place_transpose(real_t m[], const unsigned h, const unsigned w)
+{
+  // http://softwareengineering.stackexchange.com/questions/271713/transpose-a-matrix-without-a-buffering-one
+  // \param[in] m input matrix
+  // \param[in] h number of rows of \a m
+  // \param[in] w number of columns of \a m
+  //
+  // Performs in-place transposition of matrix \a m.
+
+  if ((!h) || (!w)) return;
+
+  for (unsigned start = 0; start <= w * h - 1; ++start)
+  {
+    unsigned next = start;
+    unsigned i = 0;
+    do
+    {
+      ++i;
+      next = (next % h) * w + next / h;
+    } while (next > start);
+
+    if (next >= start && i != 1)
+    {
+      const real_t tmp = m[start];
+      next = start;
+      do
+      {
+        i = (next % h) * w + next / h;
+        m[next] = (i == start) ? tmp : m[i];
+        next = i;
+      } while (next > start);
+    }
+  }
+}
+
+void @MODULE_NAME@_row_to_column_major(real_t* A, real_t* B, real_t* S, real_t* C, real_t* D, real_t* CN, unsigned int* nD, unsigned int* nDac)
+{
+  int j;
+  real_t tmp;
+  // change order of A & B
+  for(j=0; j<N; ++j) {
+    @MODULE_NAME@_in_place_transpose(A+j*NX*NX, NX, NX);
+    @MODULE_NAME@_in_place_transpose(B+j*NX*NU, NX, NU);
+    @MODULE_NAME@_in_place_transpose(S+j*NX*NU, NX, NU);
+    @MODULE_NAME@_in_place_transpose(C+nDac[j]*NX, nD[j], NX);
+    @MODULE_NAME@_in_place_transpose(D+nDac[j]*NU, nD[j], NU);
+  }
+  @MODULE_NAME@_in_place_transpose(CN, nD[N], NX);
 }
 
 /* version dealing with equality constraitns: is lb=ub, then fix the variable (corresponding column in A or B set to zero, and updated b) */
@@ -61,11 +193,8 @@ int @MODULE_NAME@_hpmpc_wrapper( real_t* A, real_t* B, real_t* b,
                             real_t* lambda, real_t* mu,
                             int* nIt )
 {
-  int i, j, ii, offset;
+  int i, j, offset;
   int hpmpc_status = -1;
-
-  // statistics from the IP routine
-  static real_t stat[5*K_MAX];
 
   // array with number of path-constraints for every stage
   @QP_ND_ARRAY@
@@ -73,215 +202,118 @@ int @MODULE_NAME@_hpmpc_wrapper( real_t* A, real_t* B, real_t* b,
   // accumulated number of path-constraints for every stage
   unsigned int nDac [N+2];
   nDac[0] = 0;
-  for(int i=0; i<N+1; ++i) nDac[i+1] = nDac[i] + nD[i];
+  for(i=0; i<N+1; ++i) nDac[i+1] = nDac[i] + nD[i];
 
-  // initialize some temporary memory for the simple bounds
-  int work_idxb [(NX+NU)*(N+1)];
-  real_t work_lb [(NX+NU)*(N+1)];
-  real_t work_ub [(NX+NU)*(N+1)];
-  real_t work_mu [@QP_DIMMU@];
 
-  // declare qp solver arguments
-  int nx [N+1];
-  int nu_N [N+1];
-  int nb [N+1];
-  int* hidxb [N+1];
-  int ng [N+1];
-  int N2 = N; // no partial condensing
-  double* hA [N];
-  double* hB [N];
-  double* hb [N];
-  double* hQ [N+1];
-  double* hS [N];
-  double* hR [N];
-  double* hq [N+1];
-  double* hr [N];
-  double* hlb [N+1];
-  double* hub [N+1];
-  double* hC [N+1];
-  double* hD [N];
-  double* hlg [N+1];
-  double* hug [N+1];
-  double* hx [N+1];
-  double* hu [N];
-  double* hmu [N+1];
-  double* hlambda [N];
-
-  // define qp solver arguments
-  //nx
-  nx[0] = 0;
-  for (i=1; i<N+1; ++i) nx[i] = NX;
-  //nu
-  for (i=0; i<N; ++i) nu_N[i] = NU;
-  nu_N[N] = 0;
-  //nb & hidxb & hlb & hub
-  ///first stage (bounds on controls only)
-  nb[0] = 0;
-  hidxb[0] = work_idxb;
-  hlb[0] = work_lb;
-  hub[0] = work_ub;
-  for (i=0; i<NU; ++i) {
-    if (lb[i] > -INF_BOUND) {
-      hlb[0][nb[0]] = lb[i];
-      hub[0][nb[0]] = ub[i];
-      hidxb[0][nb[0]] = i;
-      ++nb[0];
-    } else if (ub[i] < INF_BOUND) {
-      hlb[0][nb[0]] = lb[i];
-      hub[0][nb[0]] = ub[i];
-      hidxb[0][nb[0]] = i;
-      ++nb[0];
+  for(i=0; i<N; ++i) {
+    printf("Matrix %d\n",i);
+    for(j=0; j<NX; ++j) {
+      for(offset=0; offset<NX; ++offset) {
+        printf("%e\t",A[i*NX*NX+j*NX+offset]);
+      }
+      printf("\n");
     }
+    printf("\n");
+  }
+
+  // convert matrices from row to column major-format
+  @MODULE_NAME@_row_to_column_major(A,B,S,C,D,CN,nD,nDac);
+
+  for(i=0; i<N; ++i) {
+    printf("Matrix %d\n",i);
+    for(j=0; j<NX; ++j) {
+      for(offset=0; offset<NX; ++offset) {
+        printf("%e\t",A[i*NX*NX+offset*NX+j]);
+      }
+      printf("\n");
+    }
+    printf("\n");
+  }
+
+  // statistics from the IP routine
+  static real_t stat[5*K_MAX];
+
+  //Update constraint
+  ///first stage
+  for (i=0; i<NU; ++i) {
+    @HP_WS@lb[0][i] = lb[i];
+    @HP_WS@ub[0][i] = ub[i];
+    @HP_WS@idxb[0][i] = i;
   }
   ///middle stages
   for(j=1; j<N; ++j) {
-    nb[j] = 0;
-    hidxb[j] = work_idxb + j*(NX+NU);
-    hlb[j] = work_lb + j*(NX+NU);
-    hub[j] = work_ub + j*(NX+NU);
     for (i=0; i<NU; ++i) {
-      if (lb[j*NU+i] > -INF_BOUND) {
-        hlb[j][nb[j]] = lb[j*NU+i];
-        hub[j][nb[j]] = ub[j*NU+i];
-        hidxb[j][nb[j]] = i;
-        ++nb[j];
-      } else if (ub[j*NU+i] < INF_BOUND) {
-        hlb[j][nb[j]] = lb[j*NU+i];
-        hub[j][nb[j]] = ub[j*NU+i];
-        hidxb[j][nb[j]] = i;
-        ++nb[j];
-      }
+      @HP_WS@lb[j][i] = lb[j*NU+i];
+      @HP_WS@ub[j][i] = ub[j*NU+i];
+      @HP_WS@idxb[j][i] = i;
     }
     for (i=0; i<NX; ++i) {
       // lb and ub do not contain bounds on x0, hence the -NX offset
       offset = NU*N+NX*(j-1)+i;
-      if (lb[offset] > -INF_BOUND) {
-        hlb[j][nb[j]] = lb[offset];
-        hub[j][nb[j]] = ub[offset];
-        hidxb[j][nb[j]] = NU + i;
-        ++nb[j];
-      } else if (ub[offset] < INF_BOUND) {
-        hlb[j][nb[j]] = lb[offset];
-        hub[j][nb[j]] = ub[offset];
-        hidxb[j][nb[j]] = NU + i;
-        ++nb[j];
-      }
+      @HP_WS@lb[j][NU+i] = lb[offset];
+      @HP_WS@ub[j][NU+i] = ub[offset];
+      @HP_WS@idxb[j][NU+i] = NU + i;
     }
   }
-  ///last stage (copy constraints from second to last)
-  nb[N] = 0;
-  hidxb[N] = work_idxb + N*(NX+NU);
-  hlb[N] = work_lb + N*(NX+NU);
-  hub[N] = work_ub + N*(NX+NU);
+  ///last stage
   for (i=0; i<NX; ++i) {
     // lb and ub do not contain bounds on x0, hence the -NX offset
     offset = NU*N+NX*(N-1)+i;
-    if (lb[offset] > -INF_BOUND) {
-      hlb[N][nb[N]] = lb[offset];
-      hub[N][nb[N]] = ub[offset];
-      hidxb[N][nb[N]] = i;
-      ++nb[N];
-    } else if (ub[offset] < INF_BOUND) {
-      hlb[N][nb[N]] = lb[offset];
-      hub[N][nb[N]] = ub[offset];
-      hidxb[N][nb[N]] = i;
-      ++nb[N];
-    }
+    @HP_WS@lb[N][i] = lb[offset];
+    @HP_WS@ub[N][i] = ub[offset];
+    @HP_WS@idxb[N][i] = i;
   }
-  //ng & hC & hD & hlg & hug
-  ///first and middle stages
-  for (j=0; j<N; ++j) {
-    ng[j] = nD[j];
-    hC[j] = C + NX*nDac[j];
-    hD[j] = D + NU*nDac[j];
-    hlg[j] = lbg + nDac[j];
-    hug[j] = ubg + nDac[j];
-  }
-  ///last stage
-  ng[N] = nD[N];
-  hC[N] = CN;
-  hlg[N] = lbg + nDac[N];
-  hug[N] = ubg + nDac[N];
-  //hA & hB & hb
-  for (i=0; i<N; ++i) {
-    hA[i] = &A[i*NX*NX];
-    hB[i] = &B[i*NX*NU];
-    hb[i] = &b[i*NX];
-  }
-  //hQ & hS & hR & hq & hr
-  ///first and middle stages
-  for (i=0; i<N; ++i) {
-    hQ[i] = &Q[i*NX*NX];
-    hS[i] = &S[i*NU*NX];
-    hR[i] = &R[i*NU*NU];
-    hq[i] = &q[i*NX];
-    hr[i] = &r[i*NU];
-  }
-  ///last stage
-  hQ[N] = &Qf[0];
-  hq[N] = &qf[0];
-  //hx & hu & hmu & hlambda
-  for (i=0; i<N; ++i) {
-    hx[i] = &x[i*NX];
-    hu[i] = &u[i*NU];
-    hmu[i] = &work_mu[i*(2*(NX+NU)+2*nD[i])];
-    hlambda[i] = &lambda[i*NX];
-  }
-  hx[N] = &x[N*NX];
-  hmu[N] = &work_mu[N*(2*(NX+NU)+2*nD[N])];
-
-  // initialize memory for HPMPC
-  if(!@MODULE_NAME@_hpmpc_init) @MODULE_NAME@_hpmpc_init_fun(nx, nu_N, nb, hidxb, ng, N2);
 
   // eliminate x0:
-  ///b0_new = b0 + A0*x0
+  ///b0_new = b0 + A0*x0 (A0 is converted to column major!)
   for (i=0; i<NX; ++i) {
-    for (j=0; j<NX; ++j) hb[0][i] += hA[0][i*NX+j]*hx[0][j];
+    for (j=0; j<NX; ++j) @HP_WS@b[0][i] += @HP_WS@A[0][j*NX+i]*@HP_WS@x[0][j];
   }
-  ///r0_new = r0 + S0*x0
+  ///r0_new = r0 + S0*x0 (S0 is converted to column major!)
   for (i=0; i<NU; ++i) {
-    for (j=0; j<NX; ++j) hr[0][i] += hS[0][i*NX+j]*hx[0][j];
+    for (j=0; j<NX; ++j) @HP_WS@r[0][i] += @HP_WS@S[0][j*NU+i]*@HP_WS@x[0][j];
   }
-  ///lg_new = lg - C0*x0, ug_new = ug - C0*x0
+  ///lg_new = lg - C0*x0, ug_new = ug - C0*x0 (C0 is converted to column major!)
   for (i=0; i<nD[0]; ++i) {
-    for (j=0; j<NX; ++j) hlg[0][i] -= hC[0][i*NX+j]*hx[0][j];
-    for (j=0; j<NX; ++j) hug[0][i] -= hC[0][i*NX+j]*hx[0][j];
+    for (j=0; j<NX; ++j) @HP_WS@lg[0][i] -= @HP_WS@C[0][j*nD[0]+i]*@HP_WS@x[0][j];
+    for (j=0; j<NX; ++j) @HP_WS@ug[0][i] -= @HP_WS@C[0][j*nD[0]+i]*@HP_WS@x[0][j];
   }
 
   // call the IP solver
   double inf_norm_res[4];
-  hpmpc_status = c_order_d_ip_ocp_hard_tv(nIt, K_MAX, MU0, MU_TOL, N, nx, nu_N, nb, hidxb, ng, N2, WARM_START, hA, hB, hb, hQ, hS, hR, hq, hr, hlb, hub, hC, hD, hlg, hug, hx, hu, hlambda, hmu, inf_norm_res, @MODULE_NAME@_work, stat);
+  // hpmpc_status = c_order_d_ip_ocp_hard_tv(nIt, K_MAX, MU0, MU_TOL, N, @HP_WS@nx, @HP_WS@nu_N, @HP_WS@nb, @HP_WS@idxb, @HP_WS@ng, @HP_WS@N2[0], WARM_START, @HP_WS@A, @HP_WS@B, @HP_WS@b, @HP_WS@Q, @HP_WS@S, @HP_WS@R, @HP_WS@q, @HP_WS@r, @HP_WS@lb, @HP_WS@ub, @HP_WS@C, @HP_WS@D, @HP_WS@lg, @HP_WS@ug, @HP_WS@x, @HP_WS@u, @HP_WS@lambda, @HP_WS@mu, inf_norm_res, @HP_WS@work[0], stat);
+  hpmpc_status = fortran_order_d_ip_ocp_hard_tv(nIt, K_MAX, MU0, MU_TOL, N, @HP_WS@nx, @HP_WS@nu_N, @HP_WS@nb, @HP_WS@idxb, @HP_WS@ng, @HP_WS@N2[0], WARM_START, @HP_WS@A, @HP_WS@B, @HP_WS@b, @HP_WS@Q, @HP_WS@S, @HP_WS@R, @HP_WS@q, @HP_WS@r, @HP_WS@lb, @HP_WS@ub, @HP_WS@C, @HP_WS@D, @HP_WS@lg, @HP_WS@ug, @HP_WS@x, @HP_WS@u, @HP_WS@lambda, @HP_WS@mu, inf_norm_res, @HP_WS@work[0], stat);
 
   // restore original qpdata (required for a correct KKT value):
-  ///b0_old = b0 + A0*x0
+  ///b0_old = b0 - A0*x0
   for (i=0; i<NX; ++i) {
-    for (j=0; j<NX; ++j) hb[0][i] -= hA[0][i*NX+j]*hx[0][j];
+    for (j=0; j<NX; ++j) @HP_WS@b[0][i] -= @HP_WS@A[0][j*NX+i]*@HP_WS@x[0][j];
   }
-  ///r0_old = r0 + S0*x0
+  ///r0_old = r0 - S0*x0
   for (i=0; i<NU; ++i) {
-    for (j=0; j<NX; ++j) hr[0][i] -= hS[0][i*NX+j]*hx[0][j];
+    for (j=0; j<NX; ++j) @HP_WS@r[0][i] -= @HP_WS@S[0][j*NU+i]*@HP_WS@x[0][j];
   }
-  ///lg_old = lg - C0*x0, ug_old = ug - C0*x0
+  ///lg_old = lg - C0*x0, ug_old = ug + C0*x0
   for (i=0; i<nD[0]; ++i) {
-    for (j=0; j<NX; ++j) hlg[0][i] += hC[0][i*NX+j]*hx[0][j];
-    for (j=0; j<NX; ++j) hug[0][i] += hC[0][i*NX+j]*hx[0][j];
+    for (j=0; j<NX; ++j) @HP_WS@lg[0][i] += @HP_WS@C[0][j*nD[0]+i]*@HP_WS@x[0][j];
+    for (j=0; j<NX; ++j) @HP_WS@ug[0][i] += @HP_WS@C[0][j*nD[0]+i]*@HP_WS@x[0][j];
   }
 
   // interpret Lagrange multipliers for inequality constraints
   memset(mu, 0, sizeof mu);
   for (j=0; j<N+1; ++j) {
-    for (i=0; i<nb[j]; ++i) {
-      if (hidxb[j][i] < nu_N[j]) offset = j*NU + hidxb[j][i];
-      else offset =  N*NU + (j-1)*NX + hidxb[j][i]-nu_N[j]; // lb and ub do not contain bounds on x0, hence the -NX offset
-      mu[offset] = hmu[j][i];
+    for (i=0; i<@HP_WS@nb[j]; ++i) {
+      if (@HP_WS@idxb[j][i] < @HP_WS@nu_N[j]) offset = j*NU + @HP_WS@idxb[j][i];
+      else offset =  N*NU + (j-1)*NX + @HP_WS@idxb[j][i]-@HP_WS@nu_N[j]; // lb and ub do not contain bounds on x0, hence the -NX offset
+      mu[offset] = @HP_WS@mu[j][i];
       offset += N*(NX+NU);
-      mu[offset] = hmu[j][nb[j]+i];
+      mu[offset] = @HP_WS@mu[j][@HP_WS@nb[j]+i];
     }
     for (i=0; i<nD[j]; ++i) {
       offset = 2*N*(NX+NU)+nDac[j]+i;
-      mu[offset] = hmu[j][2*nb[j]+i];
+      mu[offset] = @HP_WS@mu[j][2*@HP_WS@nb[j]+i];
       offset += nDac[N+1];
-      mu[offset] = hmu[j][2*nb[j]+nD[j]+i];
+      mu[offset] = @HP_WS@mu[j][2*@HP_WS@nb[j]+nD[j]+i];
     }
   }
 

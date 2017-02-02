@@ -28,7 +28,7 @@ BEGIN_NAMESPACE_ACADO
 
 std::string ExportDataInternal::fcnPrefix = "acado";
 
-        
+
 using namespace CasADi;
 
 
@@ -121,8 +121,14 @@ std::string ExportDataInternal::getTypeString(	const std::string& _realString,
 	case INT:
 		return _intString;
 
+  case INT_PTR:
+    return _intString + std::string(" *");
+
 	case REAL:
 		return _realString;
+
+  case REAL_PTR:
+    return _realString + std::string(" *");
 
 	case COMPLEX:
 		return std::string("double complex");

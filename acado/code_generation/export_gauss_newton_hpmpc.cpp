@@ -43,21 +43,23 @@ ExportGaussNewtonHpmpc::ExportGaussNewtonHpmpc(	UserInteraction* _userInteractio
 
 returnValue ExportGaussNewtonHpmpc::setup( )
 {
-	setupInitialization();
+  ExportNLPSolver::setupInitialization();
 
-	setupVariables();
+  setupVariables();
 
-	setupSimulation();
+  setupSimulation();
 
-	setupObjectiveEvaluation();
+  setupObjectiveEvaluation();
 
-	setupConstraintsEvaluation();
+  setupConstraintsEvaluation();
 
-	setupEvaluation();
+  setupEvaluation();
 
 	setupAuxiliaryFunctions();
 
 	setupQPInterface();
+
+  setupInitialization();
 
 	return SUCCESSFUL_RETURN;
 }
@@ -102,6 +104,37 @@ returnValue ExportGaussNewtonHpmpc::getDataDeclarations(	ExportStatementBlock& d
 
 	declarations.addDeclaration(nIt, dataStruct);
 
+  declarations.addDeclaration(hpmpc_nx, dataStruct);
+  declarations.addDeclaration(hpmpc_nu_N, dataStruct);
+  declarations.addDeclaration(hpmpc_nb, dataStruct);
+  declarations.addDeclaration(hpmpc_idxb, dataStruct);
+  declarations.addDeclaration(hpmpc_ng, dataStruct);
+  declarations.addDeclaration(hpmpc_N2, dataStruct);
+  declarations.addDeclaration(hpmpc_A, dataStruct);
+  declarations.addDeclaration(hpmpc_B, dataStruct);
+  declarations.addDeclaration(hpmpc_b, dataStruct);
+  declarations.addDeclaration(hpmpc_Q, dataStruct);
+  declarations.addDeclaration(hpmpc_S, dataStruct);
+  declarations.addDeclaration(hpmpc_R, dataStruct);
+  declarations.addDeclaration(hpmpc_q, dataStruct);
+  declarations.addDeclaration(hpmpc_r, dataStruct);
+  declarations.addDeclaration(hpmpc_lb, dataStruct);
+  declarations.addDeclaration(hpmpc_ub, dataStruct);
+  declarations.addDeclaration(hpmpc_C, dataStruct);
+  declarations.addDeclaration(hpmpc_D, dataStruct);
+  declarations.addDeclaration(hpmpc_lg, dataStruct);
+  declarations.addDeclaration(hpmpc_ug, dataStruct);
+  declarations.addDeclaration(hpmpc_x, dataStruct);
+  declarations.addDeclaration(hpmpc_u, dataStruct);
+  declarations.addDeclaration(hpmpc_mu, dataStruct);
+  declarations.addDeclaration(hpmpc_lambda, dataStruct);
+
+  declarations.addDeclaration(hpmpc_work, dataStruct);
+  declarations.addDeclaration(hpmpc_work_lb, dataStruct);
+  declarations.addDeclaration(hpmpc_work_ub, dataStruct);
+  declarations.addDeclaration(hpmpc_work_idxb, dataStruct);
+  declarations.addDeclaration(hpmpc_work_mu, dataStruct);
+
 	return SUCCESSFUL_RETURN;
 }
 
@@ -136,6 +169,7 @@ returnValue ExportGaussNewtonHpmpc::getCode(	ExportStatementBlock& code
 	code << "extern \"C\"{\n";
 	code << "#endif\n";
 	code << "int " << moduleName << "_hpmpc_wrapper(real_t* A, real_t* B, real_t* d, real_t* Q, real_t* Qf, real_t* S, real_t* R, real_t* q, real_t* qf, real_t* r, real_t* lb, real_t* ub, real_t* C, real_t* D, real_t* lbg, real_t* ubg, real_t* CN, real_t* x, real_t* u, real_t* lambda, real_t* mu, int* nIt);\n";
+  code << "void " << moduleName << "_hpmpc_initialize(real_t* A, real_t* B, real_t* d, real_t* Q, real_t* Qf, real_t* S, real_t* R, real_t* q, real_t* qf, real_t* r, real_t* C, real_t* D, real_t* lbg, real_t* ubg, real_t* CN, real_t* x, real_t* u, real_t* lambda, real_t* mu);\n";
 	code << "#ifdef __cplusplus\n";
 	code << "}\n";
 	code << "#endif\n";
@@ -205,7 +239,6 @@ returnValue ExportGaussNewtonHpmpc::getCode(	ExportStatementBlock& code
 	return SUCCESSFUL_RETURN;
 }
 
-
 unsigned ExportGaussNewtonHpmpc::getNumQPvars( ) const
 {
 	if (initialStateFixed() == true)
@@ -217,6 +250,55 @@ unsigned ExportGaussNewtonHpmpc::getNumQPvars( ) const
 //
 // PROTECTED FUNCTIONS:
 //
+
+returnValue ExportGaussNewtonHpmpc::setupInitialization( void )
+{
+
+  string moduleName;
+  get(CG_MODULE_NAME, moduleName);
+
+  initialize << "\n/* Initialize HPMPC memory */\n";
+
+  initialize
+    << moduleName << "_hpmpc_initialize("
+
+    << evGx.getAddressString( true ) << ", "
+    << evGu.getAddressString( true ) << ", "
+    << d.getAddressString( true ) << ", "
+
+    << qpQ.getAddressString( true ) << ", "
+    << qpQf.getAddressString( true ) << ", "
+    << qpS.getAddressString( true ) << ", "
+    << qpR.getAddressString( true ) << ", "
+
+    << qpq.getAddressString( true ) << ", "
+    << qpqf.getAddressString( true ) << ", "
+    << qpr.getAddressString( true ) << ", ";
+
+    if (qpDimH) {
+      initialize << pacEvHx.getAddressString( true ) << ", "
+        << pacEvHu.getAddressString( true ) << ", ";
+    } else {
+      initialize << "0, 0, ";
+    }
+
+    initialize << qpLbA.getAddressString( true ) << ", "
+      << qpUbA.getAddressString( true ) << ", ";
+
+    if (qpDimHN) {
+      initialize << pocEvHx.getAddressString( true ) << ", ";
+    } else {
+      initialize << "0, ";
+    }
+
+    initialize  << qpx.getAddressString( true ) << ", "
+    << qpu.getAddressString( true ) << ", "
+
+    << qpLambda.getAddressString( true ) << ", "
+    << qpMu.getAddressString( true )
+
+    << ");\n";
+}
 
 returnValue ExportGaussNewtonHpmpc::setupObjectiveEvaluation( void )
 {
@@ -311,7 +393,9 @@ returnValue ExportGaussNewtonHpmpc::setupObjectiveEvaluation( void )
 		setObjQ1Q2.setup("setObjQ1Q2", tmpFx, tmpObjS, tmpQ1, tmpQ2);
 		setObjQ1Q2.addStatement( tmpQ2 == (tmpFx ^ tmpObjS) );
 		setObjQ1Q2.addStatement( tmpQ1 == tmpQ2 * tmpFx );
+		// setObjQ1Q2.addStatement( tmpQ1 == tmpFx.getTranspose() * tmpQ2.getTranspose() );  // (2017-02-02) Transposed for column major format
 		setObjQ1Q2.addStatement( tmpQ1 += evLmX );
+		// setObjQ1Q2.addStatement( tmpQ1 += evLmX.getTranspose() );                         // (2017-02-02) Transposed for column major format
 
 		loopObjective.addFunctionCall(
 				setObjQ1Q2,
@@ -333,7 +417,9 @@ returnValue ExportGaussNewtonHpmpc::setupObjectiveEvaluation( void )
 		setObjR1R2.setup("setObjR1R2", tmpFu, tmpObjS, tmpR1, tmpR2);
 		setObjR1R2.addStatement( tmpR2 == (tmpFu ^ tmpObjS) );
 		setObjR1R2.addStatement( tmpR1 == tmpR2 * tmpFu );
+		// setObjR1R2.addStatement( tmpR1 == tmpFu.getTranspose() * tmpR2.getTranspose() );  // (2017-02-02) Transposed for column major format
 		setObjR1R2.addStatement( tmpR1 += evLmU );
+		// setObjR1R2.addStatement( tmpR1 += evLmU.getTranspose() );                         // (2017-02-02) Transposed for column major format
 
 		loopObjective.addFunctionCall(
 				setObjR1R2,
@@ -352,12 +438,14 @@ returnValue ExportGaussNewtonHpmpc::setupObjectiveEvaluation( void )
 		ExportVariable tmpS2;
 
 		tmpS1.setup("tmpS1", NX, NU, REAL, ACADO_LOCAL);
+		// tmpS1.setup("tmpS1", NU, NX, REAL, ACADO_LOCAL);  // (2017-02-02) Transposed for column major format
 		tmpS2.setup("tmpS2", NX, NY, REAL, ACADO_LOCAL);
 
 		setObjS1.setup("setObjS1", tmpFx, tmpFu, tmpObjS, tmpS1);
 		setObjS1.addVariable( tmpS2 );
 		setObjS1.addStatement( tmpS2 == (tmpFx ^ tmpObjS) );
 		setObjS1.addStatement( tmpS1 == tmpS2 * tmpFu );
+		// setObjS1.addStatement( tmpS1 == tmpFu.getTranspose() * tmpS2.getTranspose() );  // (2017-02-02) Transposed for column major format
 
 		loopObjective.addFunctionCall(
 				setObjS1,
@@ -390,7 +478,9 @@ returnValue ExportGaussNewtonHpmpc::setupObjectiveEvaluation( void )
 		setObjQN1QN2.setup("setObjQN1QN2", tmpFxEnd, tmpObjSEndTerm, tmpQN1, tmpQN2);
 		setObjQN1QN2.addStatement( tmpQN2 == (tmpFxEnd ^ tmpObjSEndTerm) );
 		setObjQN1QN2.addStatement( tmpQN1 == tmpQN2 * tmpFxEnd );
+		// setObjQN1QN2.addStatement( tmpQN1 == tmpFxEnd.getTranspose()*tmpQN2.getTranspose() ); // (2017-02-02) Transposed for column major format
 		setObjQN1QN2.addStatement( tmpQN1 += evLmX );
+		// setObjQN1QN2.addStatement( tmpQN1 += evLmX.getTranspose() );                          // (2017-02-02) Transposed for column major format
 
 		indexX = getNYN();
 		ExportArgument tmpFxEndCall = tmpFxEnd.isGiven() == true ? tmpFxEnd  : objValueOut.getAddress(0, indexX);
@@ -444,55 +534,56 @@ returnValue ExportGaussNewtonHpmpc::setupObjectiveEvaluation( void )
 		);
 	}
 
-	//
-	// Setup necessary QP variables
-	//
+  //
+  // Setup necessary QP variables
+  //
 
-	if (Q1.isGiven() == true)
-	{
-		qpQ.setup("qpQ", N * NX, NX, REAL, ACADO_WORKSPACE);
-		for (unsigned blk = 0; blk < N; ++blk)
-			initialize.addStatement( qpQ.getSubMatrix(blk * NX, (blk + 1) * NX, 0, NX) == Q1);
-	}
-	else
-	{
-		qpQ = Q1;
-	}
+  if (Q1.isGiven() == true)
+  {
+    qpQ.setup("qpQ", N * NX, NX, REAL, ACADO_WORKSPACE);
+    for (unsigned blk = 0; blk < N; ++blk)
+      initialize.addStatement( qpQ.getSubMatrix(blk * NX, (blk + 1) * NX, 0, NX) == Q1);
+  }
+  else
+  {
+    qpQ = Q1;
+  }
 
-	if (R1.isGiven() == true)
-	{
-		qpR.setup("qpR", N * NU, NU, REAL, ACADO_WORKSPACE);
-		for (unsigned blk = 0; blk < N; ++blk)
-			initialize.addStatement( qpR.getSubMatrix(blk * NU, (blk + 1) * NU, 0, NU) == R1);
-	}
-	else
-	{
-		qpR = R1;
-	}
+  if (R1.isGiven() == true)
+  {
+    qpR.setup("qpR", N * NU, NU, REAL, ACADO_WORKSPACE);
+    for (unsigned blk = 0; blk < N; ++blk)
+      initialize.addStatement( qpR.getSubMatrix(blk * NU, (blk + 1) * NU, 0, NU) == R1);
+  }
+  else
+  {
+    qpR = R1;
+  }
 
-	if (S1.isGiven() == true)
-	{
-		qpS.setup("qpS", N * NX, NU, REAL, ACADO_WORKSPACE);
-		if (S1.getGivenMatrix().isZero() == true)
-			initialize.addStatement(qpS == zeros<double>(N * NX, NU));
-		else
-			for (unsigned blk = 0; blk < N; ++blk)
-				initialize.addStatement( qpS.getSubMatrix(blk * NX, (blk + 1) * NX, 0, NU) == S1);
-	}
-	else
-	{
-		qpS = S1;
-	}
+  if (S1.isGiven() == true)
+  {
+    // qpS.setup("qpS", N * NX, NU, REAL, ACADO_WORKSPACE);
+    qpS.setup("qpS", N * NU, NX, REAL, ACADO_WORKSPACE);
+    if (S1.getGivenMatrix().isZero() == true)
+      initialize.addStatement(qpS == zeros<double>(N * NU, NX));
+    else
+      for (unsigned blk = 0; blk < N; ++blk)
+        initialize.addStatement( qpS.getSubMatrix(blk * NX, (blk + 1) * NX, 0, NU) == S1);
+  }
+  else
+  {
+    qpS = S1;
+  }
 
-	if (QN1.isGiven() == true)
-	{
-		qpQf.setup("qpQf", NX, NX, REAL, ACADO_WORKSPACE);
-		initialize.addStatement( qpQf == QN1 );
-	}
-	else
-	{
-		qpQf = QN1;
-	}
+  if (QN1.isGiven() == true)
+  {
+    qpQf.setup("qpQf", NX, NX, REAL, ACADO_WORKSPACE);
+    initialize.addStatement( qpQf == QN1 );
+  }
+  else
+  {
+    qpQf = QN1;
+  }
 
 	return SUCCESSFUL_RETURN;
 }
@@ -877,17 +968,49 @@ returnValue ExportGaussNewtonHpmpc::setupEvaluation( )
 	feedback.doc( "Feedback/estimation step of the RTI scheme." );
 	feedback.setReturnValue( returnValueFeedbackPhase );
 
-	qpx.setup("qpx", NX * (N + 1), 1, REAL, ACADO_WORKSPACE);
-	qpu.setup("qpu", NU * N,       1, REAL, ACADO_WORKSPACE);
+  // QP data
+  qpx.setup("qpx", NX * (N + 1), 1, REAL, ACADO_WORKSPACE);
+  qpu.setup("qpu", NU * N,       1, REAL, ACADO_WORKSPACE);
 
-	qpq.setup("qpq", NX * N, 1, REAL, ACADO_WORKSPACE);
-	qpqf.setup("qpqf", NX, 1, REAL, ACADO_WORKSPACE);
-	qpr.setup("qpr", NU * N, 1, REAL, ACADO_WORKSPACE);
+  qpq.setup("qpq", NX * N, 1, REAL, ACADO_WORKSPACE);
+  qpqf.setup("qpqf", NX, 1, REAL, ACADO_WORKSPACE);
+  qpr.setup("qpr", NU * N, 1, REAL, ACADO_WORKSPACE);
 
-	qpLambda.setup("qpLambda", N * NX, 1, REAL, ACADO_WORKSPACE);
+  qpLambda.setup("qpLambda", N * NX, 1, REAL, ACADO_WORKSPACE);
 
-	nIt.setup("nIt", 1, 1, INT, ACADO_WORKSPACE);
+  nIt.setup("nIt", 1, 1, INT, ACADO_WORKSPACE);
 
+  // hpmpc arguments
+  hpmpc_nx.setup("hpmpc_nx", N + 1, 1, INT, ACADO_WORKSPACE);
+  hpmpc_nu_N.setup("hpmpc_nu_N", N + 1, 1, INT, ACADO_WORKSPACE);
+  hpmpc_nb.setup("hpmpc_nb", N + 1, 1, INT, ACADO_WORKSPACE);
+  hpmpc_idxb.setup("hpmpc_idxb", N + 1, 1, INT_PTR, ACADO_WORKSPACE);
+  hpmpc_ng.setup("hpmpc_ng", N + 1, 1, INT, ACADO_WORKSPACE);
+  hpmpc_N2.setup("hpmpc_N2", 1, 1, INT, ACADO_WORKSPACE);
+  hpmpc_A.setup("hpmpc_A", N, 1, REAL_PTR, ACADO_WORKSPACE);
+  hpmpc_B.setup("hpmpc_B", N, 1, REAL_PTR, ACADO_WORKSPACE);
+  hpmpc_b.setup("hpmpc_b", N, 1, REAL_PTR, ACADO_WORKSPACE);
+  hpmpc_Q.setup("hpmpc_Q", N + 1, 1, REAL_PTR, ACADO_WORKSPACE);
+  hpmpc_S.setup("hpmpc_S", N, 1, REAL_PTR, ACADO_WORKSPACE);
+  hpmpc_R.setup("hpmpc_R", N, 1, REAL_PTR, ACADO_WORKSPACE);
+  hpmpc_q.setup("hpmpc_q", N + 1, 1, REAL_PTR, ACADO_WORKSPACE);
+  hpmpc_r.setup("hpmpc_r", N, 1, REAL_PTR, ACADO_WORKSPACE);
+  hpmpc_lb.setup("hpmpc_lb", N + 1, 1, REAL_PTR, ACADO_WORKSPACE);
+  hpmpc_ub.setup("hpmpc_ub", N + 1, 1, REAL_PTR, ACADO_WORKSPACE);
+  hpmpc_C.setup("hpmpc_C", N + 1, 1, REAL_PTR, ACADO_WORKSPACE);
+  hpmpc_D.setup("hpmpc_D", N, 1, REAL_PTR, ACADO_WORKSPACE);
+  hpmpc_lg.setup("hpmpc_lg", N + 1, 1, REAL_PTR, ACADO_WORKSPACE);
+  hpmpc_ug.setup("hpmpc_ug", N + 1, 1, REAL_PTR, ACADO_WORKSPACE);
+  hpmpc_x.setup("hpmpc_x", N + 1, 1, REAL_PTR, ACADO_WORKSPACE);
+  hpmpc_u.setup("hpmpc_u", N, 1, REAL_PTR, ACADO_WORKSPACE);
+  hpmpc_mu.setup("hpmpc_mu", N + 1, 1, REAL_PTR, ACADO_WORKSPACE);
+  hpmpc_lambda.setup("hpmpc_lambda", N, 1, REAL_PTR, ACADO_WORKSPACE);
+
+  hpmpc_work.setup("hpmpc_work", 1, 1, REAL_PTR, ACADO_WORKSPACE);
+  hpmpc_work_lb.setup("hpmpc_work_lb", (NX+NU)*(N+1), 1, REAL, ACADO_WORKSPACE);
+  hpmpc_work_ub.setup("hpmpc_work_ub", (NX+NU)*(N+1), 1, REAL, ACADO_WORKSPACE);
+  hpmpc_work_idxb.setup("hpmpc_work_idxb", (NX+NU)*(N+1), 1, INT, ACADO_WORKSPACE);
+  hpmpc_work_mu.setup("hpmpc_work_mu", 2*(NX+NU)*(N+1) + 2*qpDimHtot, 1, REAL, ACADO_WORKSPACE);
 
 	if (initialStateFixed() == false)
 	{

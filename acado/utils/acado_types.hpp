@@ -111,7 +111,7 @@ enum VariableType{
 };
 
 
-/** Defines all possible methods of merging variables grids in case a grid point 
+/** Defines all possible methods of merging variables grids in case a grid point
  *	exists in both grids. */
 enum MergeMethod
 {
@@ -792,7 +792,9 @@ enum OperatingSystem
 enum ExportType
 {
 	INT,
+  INT_PTR,
 	REAL,
+  REAL_PTR,
 	COMPLEX,
 	STATIC_CONST_INT,
 	STATIC_CONST_REAL

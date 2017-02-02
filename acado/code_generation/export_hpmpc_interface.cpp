@@ -71,6 +71,8 @@ returnValue ExportHpmpcInterface::configure( const unsigned _maxIter,
 	dictionary[ "@MODULE_NAME@" ] = ExportStatement::fcnPrefix;
 	dictionary[ "@MODULE_PREFIX@" ] = ExportStatement::varPrefix;
 	dictionary[ "@QP_DIMMU@"] = toString( 2*(_NX+_NU)*(_NI+1) + 2*_DimH );
+	dictionary[ "@WORKSPACE@"] = ExportStatement::fcnPrefix + std::string("Workspace");
+	dictionary[ "@HP_WS@"] = ExportStatement::fcnPrefix + std::string("Workspace.hpmpc_");
 	// Single precision is not supported yet!
 	if(_useSinglePrecision) return ACADOERROR( RET_NOT_YET_IMPLEMENTED );
 

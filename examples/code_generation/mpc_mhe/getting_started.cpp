@@ -37,16 +37,16 @@ int main( )
 
 	// Variables:
 	DifferentialState   p    ;  // the trolley position
-	DifferentialState   v    ;  // the trolley velocity 
+	DifferentialState   v    ;  // the trolley velocity
 	DifferentialState   phi  ;  // the excitation angle
 	DifferentialState   omega;  // the angular velocity
 	Control             a    ;  // the acc. of the trolley
 
-	const double     g = 9.81;  // the gravitational constant 
+	const double     g = 9.81;  // the gravitational constant
 	const double     b = 0.20;  // the friction coefficient
 
 	// Model equations:
-	DifferentialEquation f; 
+	DifferentialEquation f;
 
 	f << dot( p ) == v;
 	f << dot( v ) == a;
@@ -77,18 +77,24 @@ int main( )
 	ocp.minimizeLSQ(W, h);
 	ocp.minimizeLSQEndTerm(WN, hN);
 
-	ocp.subjectTo( -1.0 <= a <= 1.0 );
-	ocp.subjectTo( -0.5 <= v <= 1.5 );
+	ocp.subjectTo( -0.5 <= a <= 0.1 );
+  ocp.subjectTo( -0.5 <= v <= 1.5 );
+  ocp.subjectTo( -1 <= omega <= 1 );
+	ocp.subjectTo( -50 <= p*100 <= 20 );
+	// ocp.subjectTo(AT_END, -1 <= p*100 <= 1 );
 
 	// Export the code:
 	OCPexport mpc( ocp );
 
 	mpc.set( HESSIAN_APPROXIMATION,       GAUSS_NEWTON    );
-	mpc.set( DISCRETIZATION_TYPE,         SINGLE_SHOOTING );
+	mpc.set( DISCRETIZATION_TYPE,         MULTIPLE_SHOOTING );
 	mpc.set( INTEGRATOR_TYPE,             INT_RK4         );
 	mpc.set( NUM_INTEGRATOR_STEPS,        30              );
 
-	mpc.set( QP_SOLVER,                   QP_QPOASES      );
+	// TODO: change back to QPOASES
+	mpc.set( SPARSE_QP_SOLUTION,          SPARSE_SOLVER   );
+	mpc.set( QP_SOLVER,                   QP_HPMPC        );
+//	mpc.set( QP_SOLVER,                   QP_QPOASES      );
 // 	mpc.set( HOTSTART_QP,                 YES             );
 // 	mpc.set( LEVENBERG_MARQUARDT,         1.0e-4          );
 	mpc.set( GENERATE_TEST_FILE,          YES             );

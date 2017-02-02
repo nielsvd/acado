@@ -61,7 +61,7 @@ end
 %% MPCexport
 acadoSet('problemname', 'mpc');
 
-N = 10;
+N = 50;
 ocp = acado.OCP( 0.0, N*Ts, N );
 
 W_mat = eye(n_XD+n_U,n_XD+n_U);
@@ -78,29 +78,37 @@ ocp.minimizeLSQLinearTerms( Slx, Slu );
 
 ocp.subjectTo( -10.0 <= [uC;uL] <= 10.0 );
 ocp.subjectTo( -100.0 <= [duC;duL] <= 100.0 );
-ocp.subjectTo( -0.3 <= vC <= 0.3 );
+ocp.subjectTo( -0.3 <= vC/2 <= 0.3 );
 ocp.setLinearInput(M1,A1,B1);
 ocp.setModel(f);
 
 mpc = acado.OCPexport( ocp );
 mpc.set( 'HESSIAN_APPROXIMATION',       'GAUSS_NEWTON'      );
 mpc.set( 'DISCRETIZATION_TYPE',         'MULTIPLE_SHOOTING' );
-mpc.set( 'SPARSE_QP_SOLUTION',          'FULL_CONDENSING_N2');
 mpc.set( 'INTEGRATOR_TYPE',             'INT_IRK_GL4'       );
 mpc.set( 'NUM_INTEGRATOR_STEPS',        2*N                 );
-mpc.set( 'QP_SOLVER',                   'QP_QPOASES'    	);
+% mpc.set( 'SPARSE_QP_SOLUTION',          'FULL_CONDENSING_N2');
+mpc.set( 'SPARSE_QP_SOLUTION',          'SPARSE_SOLVER'     );
+% mpc.set( 'QP_SOLVER',                   'QP_QPOASES'        );
+mpc.set( 'QP_SOLVER',                   'QP_HPMPC'        );
 mpc.set( 'HOTSTART_QP',                 'NO'             	);
 mpc.set( 'LEVENBERG_MARQUARDT', 		 1e-10				);
 % mpc.set( 'GENERATE_SIMULINK_INTERFACE', 'YES'               );
 
 if EXPORT
     mpc.exportCode( 'export_MPC' );
+    copyfile('./hpmpc', 'export_MPC/hpmpc', 'f')
+    copyfile('./blasfeo', 'export_MPC/blasfeo', 'f')
     copyfile('../../../../../../external_packages/qpoases', 'export_MPC/qpoases', 'f')
     
     cd export_MPC
     make_acado_solver('../acado_MPCstep')
     cd ..
 end
+
+% current_env = getenv('LD_LIBRARY_PATH');
+% current_folder = pwd;
+% setenv('LD_LIBRARY_PATH',[current_env,':',current_folder,'/export_MPC/blasfeo',':',current_folder,'/export_MPC/hpmpc']);
 
 %% PARAMETERS SIMULATION
 X0 = [0.0 0 0.8 0 0 0 0 0];

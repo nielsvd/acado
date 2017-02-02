@@ -168,7 +168,7 @@ VERBOSE = 0;
        if (ispc)
            DEBUGFLAGS = '-g';
        else
-           DEBUGFLAGS = '-g CXXDEBUGFLAGS=''\$CXXDEBUGFLAGS -Wall -pedantic -Wfloat-equal -Wshadow';
+           DEBUGFLAGS = '-g CXXDEBUGFLAGS=''\$CXXDEBUGFLAGS -Wall -pedantic -Wfloat-equal -Wshadow''';
        end
     elseif ( VERBOSE == 1 )
         DEBUGFLAGS = '-v';
@@ -288,7 +288,7 @@ VERBOSE = 0;
         fprintf(file,'\nACADO_.problemname = '''';');
         fprintf(file,'\nACADO_.modelactive = 0;');
         fprintf(file,sprintf('\nACADO_.mexcall = ''mex -O %s %s %s %s -output %s'';', ...
-            DEBUGFLAGS, regexprep(regexprep(CPPFLAGS, '\\', '\\\\'), '''', ''''''), '%%s', regexprep(regexprep(ACADOLIB, '\\', '\\\\'), '''', ''''''), ['%%s', extmex]));
+            regexprep(regexprep(DEBUGFLAGS, '\\', '\\\\'), '''', ''''''), regexprep(regexprep(CPPFLAGS, '\\', '\\\\'), '''', ''''''), '%%s', regexprep(regexprep(ACADOLIB, '\\', '\\\\'), '''', ''''''), ['%%s', extmex]));
         
         fclose(file);
         
