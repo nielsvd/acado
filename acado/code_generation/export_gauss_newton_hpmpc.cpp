@@ -393,9 +393,7 @@ returnValue ExportGaussNewtonHpmpc::setupObjectiveEvaluation( void )
 		setObjQ1Q2.setup("setObjQ1Q2", tmpFx, tmpObjS, tmpQ1, tmpQ2);
 		setObjQ1Q2.addStatement( tmpQ2 == (tmpFx ^ tmpObjS) );
 		setObjQ1Q2.addStatement( tmpQ1 == tmpQ2 * tmpFx );
-		// setObjQ1Q2.addStatement( tmpQ1 == tmpFx.getTranspose() * tmpQ2.getTranspose() );  // (2017-02-02) Transposed for column major format
 		setObjQ1Q2.addStatement( tmpQ1 += evLmX );
-		// setObjQ1Q2.addStatement( tmpQ1 += evLmX.getTranspose() );                         // (2017-02-02) Transposed for column major format
 
 		loopObjective.addFunctionCall(
 				setObjQ1Q2,
@@ -417,9 +415,7 @@ returnValue ExportGaussNewtonHpmpc::setupObjectiveEvaluation( void )
 		setObjR1R2.setup("setObjR1R2", tmpFu, tmpObjS, tmpR1, tmpR2);
 		setObjR1R2.addStatement( tmpR2 == (tmpFu ^ tmpObjS) );
 		setObjR1R2.addStatement( tmpR1 == tmpR2 * tmpFu );
-		// setObjR1R2.addStatement( tmpR1 == tmpFu.getTranspose() * tmpR2.getTranspose() );  // (2017-02-02) Transposed for column major format
 		setObjR1R2.addStatement( tmpR1 += evLmU );
-		// setObjR1R2.addStatement( tmpR1 += evLmU.getTranspose() );                         // (2017-02-02) Transposed for column major format
 
 		loopObjective.addFunctionCall(
 				setObjR1R2,
@@ -438,14 +434,12 @@ returnValue ExportGaussNewtonHpmpc::setupObjectiveEvaluation( void )
 		ExportVariable tmpS2;
 
 		tmpS1.setup("tmpS1", NX, NU, REAL, ACADO_LOCAL);
-		// tmpS1.setup("tmpS1", NU, NX, REAL, ACADO_LOCAL);  // (2017-02-02) Transposed for column major format
 		tmpS2.setup("tmpS2", NX, NY, REAL, ACADO_LOCAL);
 
 		setObjS1.setup("setObjS1", tmpFx, tmpFu, tmpObjS, tmpS1);
 		setObjS1.addVariable( tmpS2 );
 		setObjS1.addStatement( tmpS2 == (tmpFx ^ tmpObjS) );
 		setObjS1.addStatement( tmpS1 == tmpS2 * tmpFu );
-		// setObjS1.addStatement( tmpS1 == tmpFu.getTranspose() * tmpS2.getTranspose() );  // (2017-02-02) Transposed for column major format
 
 		loopObjective.addFunctionCall(
 				setObjS1,
@@ -478,9 +472,7 @@ returnValue ExportGaussNewtonHpmpc::setupObjectiveEvaluation( void )
 		setObjQN1QN2.setup("setObjQN1QN2", tmpFxEnd, tmpObjSEndTerm, tmpQN1, tmpQN2);
 		setObjQN1QN2.addStatement( tmpQN2 == (tmpFxEnd ^ tmpObjSEndTerm) );
 		setObjQN1QN2.addStatement( tmpQN1 == tmpQN2 * tmpFxEnd );
-		// setObjQN1QN2.addStatement( tmpQN1 == tmpFxEnd.getTranspose()*tmpQN2.getTranspose() ); // (2017-02-02) Transposed for column major format
 		setObjQN1QN2.addStatement( tmpQN1 += evLmX );
-		// setObjQN1QN2.addStatement( tmpQN1 += evLmX.getTranspose() );                          // (2017-02-02) Transposed for column major format
 
 		indexX = getNYN();
 		ExportArgument tmpFxEndCall = tmpFxEnd.isGiven() == true ? tmpFxEnd  : objValueOut.getAddress(0, indexX);
